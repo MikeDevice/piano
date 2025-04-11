@@ -17,6 +17,25 @@
         padding: 20px;
       }
 
+      /* Add class for iframe detection */
+      body.in-iframe {
+        align-items: flex-start;
+        padding: 0;
+        margin: 0;
+        min-height: auto;
+      }
+
+      body.in-iframe .piano {
+        margin: 0;
+        border-radius: 0;
+      }
+
+      body.in-iframe .controls,
+      body.in-iframe .mobile-controls {
+        padding: 0;
+        width: auto;
+      }
+
       .controls {
         margin-bottom: 20px;
         display: flex;
@@ -687,10 +706,18 @@
         }
       }
 
+      // Check if the application is embedded in an iframe
+      function checkIfInIframe() {
+        if (window.self !== window.top) {
+          document.body.classList.add('in-iframe');
+        }
+      }
+
       // Handle window resize
       window.addEventListener('resize', initializePiano);
 
       // Initial setup
+      checkIfInIframe();
       initializePiano();
     </script>
   </body>
