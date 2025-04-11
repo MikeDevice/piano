@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Interactive Piano</title>
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background-color: #f0f0f0;
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+
+      .controls {
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .mobile-controls {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .octave-nav {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      select {
+        padding: 8px;
+        font-size: 16px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+      }
+
+      button {
+        padding: 8px 16px;
+        font-size: 16px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+        background-color: white;
+        cursor: pointer;
+      }
+
+      button:active {
+        background-color: #e0e0e0;
+      }
+
+      .piano {
+        display: flex;
+        position: relative;
+        padding: 20px;
+        background-color: #333;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+        margin: 0 auto;
+        width: fit-content;
+      }
+
+      .white-key {
+        width: 40px;
+        height: 200px;
+        background-color: white;
+        border: 1px solid #ccc;
+        border-radius: 0 0 5px 5px;
+        cursor: pointer;
+        transition: background-color 0.1s;
+        position: relative;
+      }
+
+      .white-key:active,
+      .white-key.active {
+        background-color: #e0e0e0;
+      }
+
+      .black-key {
+        position: absolute;
+        width: 24px;
+        height: 120px;
+        background-color: black;
+        border-radius: 0 0 5px 5px;
+        cursor: pointer;
+        z-index: 1;
+        transition: background-color 0.1s;
+      }
+
+      .black-key:active,
+      .black-key.active {
+        background-color: #333;
+      }
+
+      .key-label {
+        position: absolute;
+        bottom: 10px;
+        width: 100%;
+        text-align: center;
+        font-size: 10px;
+        color: #666;
+      }
+
+      .black-key .key-label {
+        color: white;
+      }
+
+      .octave-label {
+        position: absolute;
+        top: 5px;
+        width: 100%;
+        text-align: center;
+        font-size: 8px;
+        color: #999;
+      }
+
+      .russian-label {
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, 0) rotate(-90deg);
+        white-space: nowrap;
+        font-size: 10px;
+        color: #666;
+      }
+
+      .white-key .russian-label {
+        bottom: 40px;
+      }
+
+      .black-key .russian-label {
+        top: 50%;
+        transform: translate(-50%, -50%) rotate(-90deg);
+        color: white;
+      }
+
+      @media (max-width: 768px) {
+        .controls {
+          display: none;
+        }
+
+        .mobile-controls {
+          display: flex;
+          width: 100%;
+          justify-content: center;
+        }
+
+        .piano {
+          padding: 10px;
+          width: fit-content;
+          margin: 0 auto;
+          overflow-x: auto;
+          max-width: 100%;
+        }
+
+        .white-key {
+          width: 30px;
+          height: 150px;
+        }
+
+        .black-key {
+          width: 18px;
+          height: 90px;
+        }
+
+        .key-label {
+          font-size: 8px;
+        }
+
+        .octave-label {
+          font-size: 6px;
+        }
+
+        .russian-label {
+          font-size: 8px;
+        }
+
+        .white-key .russian-label {
+          bottom: 30px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <label for="octaveRange">Выберите октаву:</label>
+      <select id="octaveRange">
+        <option value="1-1">Октава 1</option>
+        <option value="2-2">Октава 2</option>
+        <option value="3-3">Октава 3</option>
+        <option value="4-4">Октава 4</option>
+        <option value="5-5">Октава 5</option>
+        <option value="6-6">Октава 6</option>
+        <option value="7-7">Октава 7</option>
+      </select>
+    </div>
+
+    <div class="mobile-controls">
+      <div class="octave-nav">
+        <button id="prevOctave">&lt;</button>
+        <span id="currentOctave">Октава 4</span>
+        <button id="nextOctave">&gt;</button>
+      </div>
+    </div>
+
+    <div class="piano" id="piano"></div>
+
+    <script>
+      const audioContext = new (window.AudioContext ||
+        window.webkitAudioContext)();
+      const activeOscillators = new Map(); // Track active oscillators
+
+      function createOscillator(frequency) {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(
+          frequency,
+          audioContext.currentTime
+        );
+
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.01,
+          audioContext.currentTime + 1
+        );
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        return { oscillator, gainNode };
+      }
+
+      function stopNote(note) {
+        const sound = activeOscillators.get(note);
+        if (sound) {
+          sound.oscillator.stop();
+          activeOscillators.delete(note);
+        }
+      }
+
+      // Generate frequencies for all 88 keys
+      function generateFrequencies() {
+        const frequencies = {};
+        const baseFreq = 440; // A4
+        const notes = [
+          'C',
+          'C#',
+          'D',
+          'D#',
+          'E',
+          'F',
+          'F#',
+          'G',
+          'G#',
+          'A',
+          'A#',
+          'B',
+        ];
+
+        // Generate frequencies for all octaves (1-7)
+        for (let octave = 1; octave <= 7; octave++) {
+          notes.forEach((note, index) => {
+            const key = `${note}${octave}`;
+            const halfStepsFromA4 = (octave - 4) * 12 + index - 9;
+            frequencies[key] = baseFreq * Math.pow(2, halfStepsFromA4 / 12);
+          });
+        }
+
+        return frequencies;
+      }
+
+      const noteFrequencies = generateFrequencies();
+
+      function createPianoKeys(startOctave, endOctave) {
+        const piano = document.getElementById('piano');
+        piano.innerHTML = ''; // Clear existing keys
+        const notes = [
+          'C',
+          'C#',
+          'D',
+          'D#',
+          'E',
+          'F',
+          'F#',
+          'G',
+          'G#',
+          'A',
+          'A#',
+          'B',
+        ];
+        const russianNotes = {
+          C: 'До',
+          'C#': 'До#',
+          D: 'Ре',
+          'D#': 'Ре#',
+          E: 'Ми',
+          F: 'Фа',
+          'F#': 'Фа#',
+          G: 'Соль',
+          'G#': 'Соль#',
+          A: 'Ля',
+          'A#': 'Ля#',
+          B: 'Си',
+        };
+        let whiteKeyCount = 0;
+        let blackKeyCount = 0;
+
+        // Create keys for specified octaves
+        for (let octave = startOctave; octave <= endOctave; octave++) {
+          notes.forEach((note, index) => {
+            const isBlack = note.includes('#');
+            const key = document.createElement('div');
+            key.dataset.note = `${note}${octave}`;
+
+            if (isBlack) {
+              key.className = 'black-key';
+              key.style.left = `${whiteKeyCount * 40 - 8}px`;
+              blackKeyCount++;
+            } else {
+              key.className = 'white-key';
+              whiteKeyCount++;
+            }
+
+            const label = document.createElement('span');
+            label.className = 'key-label';
+            label.textContent = note;
+            key.appendChild(label);
+
+            const russianLabel = document.createElement('span');
+            russianLabel.className = 'russian-label';
+            russianLabel.textContent = russianNotes[note];
+            key.appendChild(russianLabel);
+
+            const octaveLabel = document.createElement('span');
+            octaveLabel.className = 'octave-label';
+            octaveLabel.textContent = octave;
+            key.appendChild(octaveLabel);
+
+            piano.appendChild(key);
+          });
+        }
+
+        // Add event listeners for the new keys
+        addKeyEventListeners();
+      }
+
+      function createSingleOctave(octave) {
+        const piano = document.getElementById('piano');
+        piano.innerHTML = ''; // Clear existing keys
+        const notes = [
+          'C',
+          'C#',
+          'D',
+          'D#',
+          'E',
+          'F',
+          'F#',
+          'G',
+          'G#',
+          'A',
+          'A#',
+          'B',
+        ];
+        const russianNotes = {
+          C: 'До',
+          'C#': 'До#',
+          D: 'Ре',
+          'D#': 'Ре#',
+          E: 'Ми',
+          F: 'Фа',
+          'F#': 'Фа#',
+          G: 'Соль',
+          'G#': 'Соль#',
+          A: 'Ля',
+          'A#': 'Ля#',
+          B: 'Си',
+        };
+        let whiteKeyCount = 0;
+        let blackKeyCount = 0;
+
+        notes.forEach((note, index) => {
+          const isBlack = note.includes('#');
+          const key = document.createElement('div');
+          key.dataset.note = `${note}${octave}`;
+
+          if (isBlack) {
+            key.className = 'black-key';
+            // Adjust position based on screen size
+            if (window.innerWidth <= 768) {
+              key.style.left = `${whiteKeyCount * 30 - 6}px`;
+            } else {
+              key.style.left = `${whiteKeyCount * 40 - 8}px`;
+            }
+            blackKeyCount++;
+          } else {
+            key.className = 'white-key';
+            whiteKeyCount++;
+          }
+
+          const label = document.createElement('span');
+          label.className = 'key-label';
+          label.textContent = note;
+          key.appendChild(label);
+
+          const russianLabel = document.createElement('span');
+          russianLabel.className = 'russian-label';
+          russianLabel.textContent = russianNotes[note];
+          key.appendChild(russianLabel);
+
+          const octaveLabel = document.createElement('span');
+          octaveLabel.className = 'octave-label';
+          octaveLabel.textContent = octave;
+          key.appendChild(octaveLabel);
+
+          piano.appendChild(key);
+        });
+
+        // Add event listeners for the new keys
+        addKeyEventListeners();
+      }
+
+      function addKeyEventListeners() {
+        const keys = document.querySelectorAll('.white-key, .black-key');
+
+        keys.forEach((key) => {
+          // Mouse events
+          key.addEventListener('mousedown', () => {
+            const note = key.dataset.note;
+            const frequency = noteFrequencies[note];
+            const sound = createOscillator(frequency);
+            sound.oscillator.start();
+            activeOscillators.set(note, sound);
+            key.classList.add('active');
+          });
+
+          key.addEventListener('mouseup', () => {
+            const note = key.dataset.note;
+            stopNote(note);
+            key.classList.remove('active');
+          });
+
+          key.addEventListener('mouseleave', () => {
+            const note = key.dataset.note;
+            stopNote(note);
+            key.classList.remove('active');
+          });
+
+          // Touch events
+          key.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent default touch behavior
+            const note = key.dataset.note;
+            const frequency = noteFrequencies[note];
+            const sound = createOscillator(frequency);
+            sound.oscillator.start();
+            activeOscillators.set(note, sound);
+            key.classList.add('active');
+          });
+
+          key.addEventListener('touchend', (e) => {
+            e.preventDefault(); // Prevent default touch behavior
+            const note = key.dataset.note;
+            stopNote(note);
+            key.classList.remove('active');
+          });
+
+          key.addEventListener('touchcancel', (e) => {
+            e.preventDefault(); // Prevent default touch behavior
+            const note = key.dataset.note;
+            stopNote(note);
+            key.classList.remove('active');
+          });
+        });
+      }
+
+      // Global mouseup handler to catch cases where mouseup happens outside the key
+      document.addEventListener('mouseup', () => {
+        const keys = document.querySelectorAll('.white-key, .black-key');
+        keys.forEach((key) => {
+          const note = key.dataset.note;
+          stopNote(note);
+          key.classList.remove('active');
+        });
+      });
+
+      // Global touch handler
+      document.addEventListener('touchend', () => {
+        const keys = document.querySelectorAll('.white-key, .black-key');
+        keys.forEach((key) => {
+          const note = key.dataset.note;
+          stopNote(note);
+          key.classList.remove('active');
+        });
+      });
+
+      // Keyboard mapping for the middle octave
+      const keyMap = {
+        // White keys - second row of keyboard (English layout)
+        a: 'C',
+        s: 'D',
+        d: 'E',
+        f: 'F',
+        g: 'G',
+        h: 'A',
+        j: 'B',
+        k: 'C',
+
+        // Black keys - first row of keyboard (English layout)
+        q: 'C#',
+        w: 'D#',
+        e: 'F#',
+        r: 'G#',
+        t: 'A#',
+
+        // Additional keys for other octaves (English layout)
+        z: 'C',
+        x: 'D',
+        c: 'E',
+        v: 'F',
+        b: 'G',
+        n: 'A',
+        m: 'B',
+        ',': 'C',
+
+        // Shift + keys for higher octave (English layout)
+        'Shift+a': 'C',
+        'Shift+s': 'D',
+        'Shift+d': 'E',
+        'Shift+f': 'F',
+        'Shift+g': 'G',
+        'Shift+h': 'A',
+        'Shift+j': 'B',
+        'Shift+k': 'C',
+
+        // Russian layout - white keys (second row)
+        ф: 'C',
+        ы: 'D',
+        в: 'E',
+        а: 'F',
+        п: 'G',
+        р: 'A',
+        о: 'B',
+        л: 'C',
+
+        // Russian layout - black keys (first row)
+        й: 'C#',
+        ц: 'D#',
+        у: 'F#',
+        к: 'G#',
+        е: 'A#',
+
+        // Russian layout - additional keys
+        я: 'C',
+        ч: 'D',
+        с: 'E',
+        м: 'F',
+        и: 'G',
+        т: 'A',
+        ь: 'B',
+        б: 'C',
+
+        // Russian layout - Shift + keys
+        'Shift+ф': 'C',
+        'Shift+ы': 'D',
+        'Shift+в': 'E',
+        'Shift+а': 'F',
+        'Shift+п': 'G',
+        'Shift+р': 'A',
+        'Shift+о': 'B',
+        'Shift+л': 'C',
+      };
+
+      // Helper function to get the key combination
+      function getKeyCombo(event) {
+        let combo = event.key.toLowerCase();
+        if (event.shiftKey) {
+          combo = 'Shift+' + combo;
+        }
+        return combo;
+      }
+
+      // Function to get the current octave based on the displayed piano
+      function getCurrentOctave() {
+        const piano = document.getElementById('piano');
+        const keys = piano.querySelectorAll('.white-key, .black-key');
+        if (keys.length > 0) {
+          // Get the first key's note to determine the current octave
+          const firstKeyNote = keys[0].dataset.note;
+          return parseInt(firstKeyNote.slice(-1));
+        }
+        return 4; // Default to octave 4 if no keys are found
+      }
+
+      document.addEventListener('keydown', (event) => {
+        const combo = getKeyCombo(event);
+        if (keyMap[combo]) {
+          const noteBase = keyMap[combo];
+          const currentOctave = getCurrentOctave();
+          const note = `${noteBase}${currentOctave}`;
+
+          const key = document.querySelector(`[data-note="${note}"]`);
+          if (key && !key.classList.contains('active')) {
+            const frequency = noteFrequencies[note];
+            const sound = createOscillator(frequency);
+            sound.oscillator.start();
+            activeOscillators.set(note, sound);
+            key.classList.add('active');
+          }
+        }
+      });
+
+      document.addEventListener('keyup', (event) => {
+        const combo = getKeyCombo(event);
+        if (keyMap[combo]) {
+          const noteBase = keyMap[combo];
+          const currentOctave = getCurrentOctave();
+          const note = `${noteBase}${currentOctave}`;
+
+          const key = document.querySelector(`[data-note="${note}"]`);
+          if (key) {
+            stopNote(note);
+            key.classList.remove('active');
+          }
+        }
+      });
+
+      // Handle octave range selection for desktop
+      const octaveRange = document.getElementById('octaveRange');
+      octaveRange.addEventListener('change', (event) => {
+        const [start, end] = event.target.value.split('-').map(Number);
+        createSingleOctave(start);
+        // Save selected octave to localStorage
+        localStorage.setItem('selectedOctave', start);
+      });
+
+      // Handle mobile octave navigation
+      let currentOctave = 4;
+      const currentOctaveDisplay = document.getElementById('currentOctave');
+      const prevOctaveBtn = document.getElementById('prevOctave');
+      const nextOctaveBtn = document.getElementById('nextOctave');
+
+      function updateMobileOctave() {
+        currentOctaveDisplay.textContent = `Октава ${currentOctave}`;
+        createSingleOctave(currentOctave);
+        // Save selected octave to localStorage
+        localStorage.setItem('selectedOctave', currentOctave);
+      }
+
+      prevOctaveBtn.addEventListener('click', () => {
+        if (currentOctave > 1) {
+          currentOctave--;
+          updateMobileOctave();
+        }
+      });
+
+      nextOctaveBtn.addEventListener('click', () => {
+        if (currentOctave < 7) {
+          currentOctave++;
+          updateMobileOctave();
+        }
+      });
+
+      // Initialize based on screen size
+      function initializePiano() {
+        // Load saved octave from localStorage or use default (4)
+        const savedOctave =
+          parseInt(localStorage.getItem('selectedOctave')) || 4;
+
+        if (window.innerWidth <= 768) {
+          currentOctave = savedOctave;
+          createSingleOctave(savedOctave);
+        } else {
+          createSingleOctave(savedOctave);
+          // Set the octave range selector to match the displayed octave
+          document.getElementById(
+            'octaveRange'
+          ).value = `${savedOctave}-${savedOctave}`;
+        }
+      }
+
+      // Handle window resize
+      window.addEventListener('resize', initializePiano);
+
+      // Initial setup
+      initializePiano();
+    </script>
+  </body>
+</html>
